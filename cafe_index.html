@@ -38,6 +38,9 @@
     left:auto !important; z-index:11; border-radius:999px !important;
     background:rgba(24,17,12,.78) !important; border:1px solid rgba(255,205,140,.35) !important;
     color:#f3e7d3 !important; font-size:13px !important; padding:9px 16px !important; width:auto !important; }
+
+  #vignette { position:fixed; inset:0; z-index:5; pointer-events:none;
+    background:radial-gradient(ellipse at 50% 42%, rgba(0,0,0,0) 52%, rgba(24,12,4,0.38) 100%); }
 </style>
 <script type="importmap">
 { "imports": {
@@ -48,6 +51,7 @@
 </head>
 <body>
 <div id="app"></div>
+<div id="vignette"></div>
 <div id="title" class="chip">☕ 喫茶店の箱庭</div>
 <div id="wallStatus" class="chip">壁はすべて表示中</div>
 <div id="modelErr" class="chip" style="top:auto;bottom:64px;left:12px;right:auto;color:#ff9a8a;display:none;"></div>
@@ -104,13 +108,13 @@ document.getElementById('app').appendChild(renderer.domElement);
 document.body.appendChild(VRButton.createButton(renderer));
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x14100d);
+scene.background = new THREE.Color(0x0d1626);
 
 const camera = new THREE.PerspectiveCamera(46, innerWidth / innerHeight, 0.05, 100);
-camera.position.set(2.6, 1.9, 3.4);
+camera.position.set(2.2, 1.6, 3.6);
 
 const controls = new OrbitControls(camera, renderer.domElement);
-controls.target.set(0, 0.55, -0.2);
+controls.target.set(0, 0.5, -0.3);
 controls.enableDamping = true;
 controls.dampingFactor = 0.06;
 controls.maxDistance = 9;
@@ -181,7 +185,7 @@ const darkWoodTex = canvasTex(256, 256, (g, w, h) => {
   }
 }, 1, 1);
 const glassTex = canvasTex(256, 256, (g, w, h) => {
-  const cols = ['#f7b733', '#fc4a1a', '#f9d976', '#7fb069', '#e88ca0', '#f39c3d', '#ffd23f', '#5da271'];
+  const cols = ['#f7b733', '#f9d976', '#ffd23f', '#f39c3d', '#e8a13c', '#ffe08a', '#a8b56b', '#7fb069'];
   const n = 5, s = w / n;
   for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
     g.fillStyle = cols[(Math.random() * cols.length) | 0];
@@ -195,18 +199,21 @@ const glassTex = canvasTex(256, 256, (g, w, h) => {
   }
 }, 1, 1);
 const skyTex = canvasTex(256, 384, (g, w, h) => {
+  // 窓の外：夕景のボケ（濃い青＋暖色の丸い光）
   const gr = g.createLinearGradient(0, 0, 0, h);
-  gr.addColorStop(0, '#16264d'); gr.addColorStop(0.55, '#33507e'); gr.addColorStop(1, '#7d94b8');
+  gr.addColorStop(0, '#0d1c36'); gr.addColorStop(0.6, '#1b3358'); gr.addColorStop(1, '#2c4a73');
   g.fillStyle = gr; g.fillRect(0, 0, w, h);
-  g.fillStyle = '#f4ecd8';
-  g.beginPath(); g.arc(w * 0.72, h * 0.2, 17, 0, 7); g.fill();
-  g.fillStyle = 'rgba(22,38,77,0.85)';
-  g.beginPath(); g.arc(w * 0.66, h * 0.17, 15, 0, 7); g.fill();
+  const bok = [[60, 120, 22, '255,170,90'], [120, 220, 32, '255,150,70'], [182, 92, 15, '255,200,130'],
+    [92, 300, 17, '255,180,100'], [202, 262, 11, '255,220,180'], [150, 162, 10, '240,240,255'],
+    [42, 58, 10, '255,190,120'], [215, 180, 8, '255,210,150'], [70, 200, 8, '255,230,200']];
+  for (const [x, y, r, c] of bok) {
+    const rg = g.createRadialGradient(x, y, 0, x, y, r);
+    rg.addColorStop(0, `rgba(${c},0.9)`); rg.addColorStop(0.55, `rgba(${c},0.35)`); rg.addColorStop(1, `rgba(${c},0)`);
+    g.fillStyle = rg; g.beginPath(); g.arc(x, y, r, 0, 7); g.fill();
+  }
   g.fillStyle = '#ffffff';
-  for (let i = 0; i < 60; i++) { g.globalAlpha = Math.random() * .8 + .2; g.fillRect(Math.random() * w, Math.random() * h * .6, 2, 2); }
+  for (let i = 0; i < 26; i++) { g.globalAlpha = Math.random() * .7 + .2; g.fillRect(Math.random() * w, Math.random() * h * .5, 1.6, 1.6); }
   g.globalAlpha = 1;
-  g.fillStyle = '#0e1626';
-  g.beginPath(); g.moveTo(0, h); g.lineTo(0, h * .86); g.lineTo(w * .35, h * .8); g.lineTo(w * .6, h * .87); g.lineTo(w, h * .82); g.lineTo(w, h); g.fill();
 }, 1, 1);
 const steamTex = (() => {
   const c = document.createElement('canvas'); c.width = c.height = 128;
@@ -258,9 +265,125 @@ function cyl(rt, rb, h, mat, x = 0, y = 0, z = 0, parent = scene, seg = 24) {
     new THREE.MeshStandardMaterial({ color: 0x7e3538, roughness: 1 }));
   rug.rotation.x = -Math.PI / 2; rug.position.set(TABLE_POS.x, 0.002, TABLE_POS.z);
   rug.receiveShadow = true; scene.add(rug);
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(40, 40),
-    new THREE.MeshStandardMaterial({ color: 0x171310, roughness: 1 }));
-  ground.rotation.x = -Math.PI / 2; ground.position.y = -0.185; scene.add(ground);
+  // 箱が載る暗い木のテーブル面
+  const tableTex = canvasTex(256, 256, (g, w, h) => {
+    g.fillStyle = '#3a2413'; g.fillRect(0, 0, w, h);
+    const rows = 4;
+    for (let r = 0; r < rows; r++) {
+      const y = r * h / rows;
+      g.fillStyle = ['#402914', '#37220f', '#442c16'][(Math.random() * 3) | 0];
+      g.fillRect(0, y, w, h / rows - 2);
+      g.strokeStyle = 'rgba(15,8,3,0.6)'; g.lineWidth = 2;
+      g.beginPath(); g.moveTo(0, y + h / rows - 2); g.lineTo(w, y + h / rows - 2); g.stroke();
+      g.strokeStyle = 'rgba(90,60,30,0.35)'; g.lineWidth = 1;
+      for (let i = 0; i < 7; i++) {
+        const gy = y + 4 + Math.random() * (h / rows - 10);
+        g.beginPath(); g.moveTo(0, gy);
+        g.bezierCurveTo(w * .3, gy + 2, w * .7, gy - 2, w, gy); g.stroke();
+      }
+    }
+  }, 6, 6);
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(36, 36),
+    new THREE.MeshStandardMaterial({ map: tableTex, roughness: .85 }));
+  ground.rotation.x = -Math.PI / 2; ground.position.y = -0.185;
+  ground.receiveShadow = true; scene.add(ground);
+  // 背景：夕景グラデーション＋大きなボケの背景板
+  const bdTex = canvasTex(512, 256, (g, w, h) => {
+    const gr = g.createLinearGradient(0, 0, 0, h);
+    gr.addColorStop(0, '#0a1526'); gr.addColorStop(0.6, '#14273f'); gr.addColorStop(1, '#1d3450');
+    g.fillStyle = gr; g.fillRect(0, 0, w, h);
+    const bok = [[70, 150, 26, '255,170,90'], [150, 90, 14, '255,200,130'], [250, 170, 34, '255,160,70'],
+      [330, 80, 12, '240,240,255'], [400, 140, 22, '255,180,100'], [460, 60, 10, '255,210,150'],
+      [110, 195, 12, '255,190,120'], [290, 110, 9, '255,220,180'], [430, 200, 16, '255,150,80'],
+      [190, 140, 8, '255,230,200'], [40, 70, 9, '255,190,120'], [370, 185, 8, '255,220,190']];
+    for (const [x, y, r, c] of bok) {
+      const rg = g.createRadialGradient(x, y, 0, x, y, r);
+      rg.addColorStop(0, `rgba(${c},0.85)`); rg.addColorStop(0.55, `rgba(${c},0.35)`); rg.addColorStop(1, `rgba(${c},0)`);
+      g.fillStyle = rg; g.beginPath(); g.arc(x, y, r, 0, 7); g.fill();
+    }
+  }, 1, 1);
+  const backdrop = new THREE.Mesh(new THREE.PlaneGeometry(46, 20),
+    new THREE.MeshBasicMaterial({ map: bdTex }));
+  backdrop.position.set(0, 6.5, -16); scene.add(backdrop);
+}
+
+/* ---------------- wooden box frame（前面の柱・梁・下リップ） ---------------- */
+{
+  const fm = M.darkWood;
+  const px = ROOM.w / 2 + 0.07, pz = ROOM.d / 2 + 0.06;   // 柱位置 ±1.77 / z 1.66
+  box(0.15, 2.06, 0.15, fm, -px, 1.01, pz);               // 左柱
+  box(0.15, 2.06, 0.15, fm,  px, 1.01, pz);               // 右柱
+  box(px * 2 + 0.3, 0.14, 0.15, fm, 0, 2.08, pz);          // 前面上梁
+  box(0.15, 0.13, ROOM.d + 0.2, fm, -px, 2.08, 0);        // 左上レール
+  box(0.15, 0.13, ROOM.d + 0.2, fm,  px, 2.08, 0);        // 右上レール
+  box(ROOM.w + 0.3, 0.15, 0.1, fm, 0, 0.035, pz - 0.02);   // 前面下のリップ
+}
+
+/* ---------------- foreground greenery（苔・小花・小鉢・小枝） ---------------- */
+const leafGeo = new THREE.SphereGeometry(0.05, 10, 8);
+{
+  const mossMats = [0x5d8140, 0x6f9550, 0x49682f].map(c =>
+    new THREE.MeshStandardMaterial({ color: c, roughness: 1 }));
+  const mossGeo = new THREE.SphereGeometry(1, 10, 8);
+  const soilStrip = box(ROOM.w - 0.1, 0.05, 0.34, M.soil, 0, 0.025, 1.42);
+  soilStrip.castShadow = false;
+  let seed = 7;
+  const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  // 苔マウンド
+  for (let i = 0; i < 46; i++) {
+    const m = new THREE.Mesh(mossGeo, mossMats[i % 3]);
+    const r = 0.045 + rnd() * 0.06;
+    m.scale.set(r, r * 0.45, r);
+    m.position.set(-1.58 + rnd() * 3.16, 0.045, 1.30 + rnd() * 0.24);
+    m.receiveShadow = true; scene.add(m);
+  }
+  // 小花（白い花＋細い茎）
+  const stemMat = new THREE.MeshStandardMaterial({ color: 0x51703c, roughness: 1 });
+  const flowerMat = new THREE.MeshStandardMaterial({ color: 0xf6efdd, roughness: .8 });
+  const stemGeo = new THREE.CylinderGeometry(0.0022, 0.0022, 1, 5);
+  const budGeo = new THREE.SphereGeometry(0.013, 8, 6);
+  for (let i = 0; i < 18; i++) {
+    const fx = -1.55 + rnd() * 3.1, fz = 1.32 + rnd() * 0.2, fh = 0.07 + rnd() * 0.07;
+    const st = new THREE.Mesh(stemGeo, stemMat);
+    st.scale.y = fh; st.position.set(fx, 0.05 + fh / 2, fz); scene.add(st);
+    const bud = new THREE.Mesh(budGeo, flowerMat);
+    bud.position.set(fx, 0.05 + fh + 0.008, fz); bud.castShadow = true; scene.add(bud);
+  }
+  // 小枝
+  const twigMat = new THREE.MeshStandardMaterial({ color: 0x5d4126, roughness: 1 });
+  for (const [tx, tz, rz, ry] of [[-1.25, 1.47, 1.35, 0.4], [0.9, 1.36, 1.5, -0.7], [1.45, 1.5, 1.2, 0.9]]) {
+    const tw = cyl(0.008, 0.011, 0.34, twigMat, tx, 0.06, tz);
+    tw.rotation.set(0, ry, rz);
+  }
+  // 前面コーナーの小鉢 ×2
+  function cornerPot(x, z) {
+    cyl(0.055, 0.042, 0.085, M.terra, x, 0.043, z);
+    cyl(0.05, 0.05, 0.015, M.soil, x, 0.088, z);
+    for (let i = 0; i < 5; i++) {
+      const leaf = new THREE.Mesh(leafGeo, M.leaf);
+      const a = i * 1.35;
+      leaf.position.set(x + Math.cos(a) * 0.028, 0.13 + (i % 2) * 0.035, z + Math.sin(a) * 0.028);
+      leaf.scale.set(0.8, 1.5, 0.8); leaf.rotation.z = Math.cos(a) * 0.5;
+      leaf.castShadow = true; scene.add(leaf);
+    }
+  }
+  cornerPot(-1.52, 1.4); cornerPot(1.52, 1.4);
+  // 左壁の内側・手前を這う苔
+  for (let i = 0; i < 7; i++) {
+    const m = new THREE.Mesh(mossGeo, mossMats[i % 3]);
+    const r = 0.04 + rnd() * 0.035;
+    m.scale.set(r * 0.6, r, r * 0.6);
+    m.position.set(-1.66 + rnd() * 0.03, 0.15 + i * 0.22 + rnd() * 0.08, 1.58 - rnd() * 0.06);
+    scene.add(m);
+  }
+  // シダ（細長い葉を放射状に）
+  for (let i = 0; i < 6; i++) {
+    const f = new THREE.Mesh(leafGeo, M.leaf);
+    const a = -0.5 + i * 0.22;
+    f.scale.set(0.35, 2.6, 0.7);
+    f.position.set(-1.58 + Math.sin(a) * 0.05, 0.16, 1.3 + Math.cos(a) * 0.04);
+    f.rotation.z = a; f.castShadow = true; scene.add(f);
+  }
 }
 
 /* ---------------- walls (fade groups) ---------------- */
@@ -291,10 +414,12 @@ scene.add(backGroup, leftGroup, rightGroup);
     new THREE.MeshBasicMaterial({ map: skyTex }));
   sky.rotation.y = -Math.PI / 2; sky.position.set(w / 2 + 0.22, (wy0 + wy1) / 2, wz);
   rightGroup.add(sky);
-  // 窓辺の小物（ベンチ＋植木）※右壁グループと一緒にフェード
-  box(0.3, 0.05, 1.1, M.darkWood, w / 2 - 0.17, 0.3, wz, rightGroup);
-  box(0.26, 0.3, 0.08, M.darkWood, w / 2 - 0.17, 0.15, wz - 0.5, rightGroup);
-  box(0.26, 0.3, 0.08, M.darkWood, w / 2 - 0.17, 0.15, wz + 0.5, rightGroup);
+  // 窓下のベンチ（深緑の張り地）※右壁グループと一緒にフェード
+  const benchMat = new THREE.MeshStandardMaterial({ color: 0x2e4d38, roughness: 1 });
+  box(0.3, 0.05, 1.16, M.darkWood, w / 2 - 0.19, 0.025, wz, rightGroup);   // 脚台
+  box(0.34, 0.19, 1.16, M.darkWood, w / 2 - 0.19, 0.145, wz, rightGroup);  // 台座
+  box(0.32, 0.09, 1.12, benchMat, w / 2 - 0.19, 0.285, wz, rightGroup);    // 座面
+  box(0.09, 0.42, 1.12, benchMat, w / 2 - 0.045, 0.55, wz, rightGroup);    // 背もたれ
   // 右壁の絵 ×2
   for (const [pz, col] of [[0.75, 0x51683f], [1.25, 0x74553a]]) {
     box(0.03, 0.34, 0.27, M.darkWood, w / 2 - 0.016, 1.25, pz, rightGroup);
@@ -311,24 +436,49 @@ scene.add(backGroup, leftGroup, rightGroup);
 }
 
 /* 背面棚（背面グループと一緒にフェード） */
-function shelfGoods(parent, y, z) {
-  box(2.2, 0.035, 0.24, M.darkWood, -0.25, y, z, parent);
-  // 皿のスタック
-  for (let i = 0; i < 3; i++) cyl(0.075, 0.06, 0.012, M.ceramic, -1.05 + i * 0.02, y + 0.03 + i * 0.013, z, parent);
-  // カップ類
-  for (let i = 0; i < 4; i++) cyl(0.032, 0.026, 0.05, M.ceramic, -0.72 + i * 0.14, y + 0.045, z, parent);
-  // 瓶
-  for (let i = 0; i < 3; i++) {
-    cyl(0.03, 0.03, 0.13, i % 2 ? M.brass : M.glass, 0.28 + i * 0.13, y + 0.085, z, parent);
-    cyl(0.012, 0.012, 0.05, M.brass, 0.28 + i * 0.13, y + 0.17, z, parent);
+function pottedPlant(parent, x, y, z, s = 1) {
+  cyl(0.042 * s, 0.03 * s, 0.06 * s, M.terra, x, y + 0.03 * s, z, parent);
+  for (let i = 0; i < 4; i++) {
+    const leaf = new THREE.Mesh(leafGeo, M.leaf);
+    const a = i * 1.7, r = 0.02 * s;
+    leaf.position.set(x + Math.cos(a) * r, y + (0.095 + (i % 2) * 0.02) * s, z + Math.sin(a) * r);
+    leaf.scale.setScalar(s * (0.8 + (i % 3) * 0.25));
+    leaf.castShadow = true; parent.add(leaf);
   }
-  // 小さな植木
-  cyl(0.04, 0.03, 0.06, M.terra, 0.85, y + 0.05, z, parent);
-  const leaf = new THREE.Mesh(new THREE.SphereGeometry(0.055, 10, 8), M.leaf);
-  leaf.position.set(0.85, y + 0.13, z); leaf.castShadow = true; parent.add(leaf);
 }
-shelfGoods(backGroup, 1.18, -ROOM.d / 2 + 0.14);
-shelfGoods(backGroup, 1.5, -ROOM.d / 2 + 0.14);
+/* 上段：鉢植え＋瓶・缶 */
+function shelfUpper(parent, y, z) {
+  box(2.2, 0.035, 0.24, M.darkWood, -0.25, y, z, parent);
+  pottedPlant(parent, -1.15, y + 0.018, z, 1.1);
+  pottedPlant(parent, -0.88, y + 0.018, z, 0.9);
+  pottedPlant(parent, 0.58, y + 0.018, z, 0.8);
+  const jarMats = [M.ceramic, M.brass, M.glass, M.ceramic];
+  for (let i = 0; i < 4; i++) {
+    const jx = -0.45 + i * 0.17;
+    cyl(0.038, 0.038, 0.11, jarMats[i], jx, y + 0.073, z, parent);
+    cyl(0.03, 0.03, 0.015, M.darkWood, jx, y + 0.135, z, parent);
+  }
+}
+/* 下段：重ね皿＋カップ・小鉢 */
+function shelfLower(parent, y, z) {
+  box(2.2, 0.035, 0.24, M.darkWood, -0.25, y, z, parent);
+  for (let sx = 0; sx < 3; sx++)
+    for (let i = 0; i < 4; i++)
+      cyl(0.07, 0.055, 0.011, M.ceramic, -1.08 + sx * 0.24, y + 0.024 + i * 0.012, z, parent);
+  for (let i = 0; i < 4; i++) cyl(0.032, 0.026, 0.05, M.ceramic, -0.18 + i * 0.14, y + 0.043, z, parent);
+  for (let i = 0; i < 2; i++) cyl(0.045, 0.03, 0.035, M.ceramic, 0.5 + i * 0.15, y + 0.035, z, parent);
+}
+/* 右の小棚：鉢植え＋瓶＋カップ */
+function shelfSmall(parent, y, z) {
+  box(0.72, 0.035, 0.22, M.darkWood, 0.98, y, z, parent);
+  pottedPlant(parent, 0.78, y + 0.018, z, 0.9);
+  cyl(0.03, 0.03, 0.12, M.glass, 1.03, y + 0.078, z, parent);
+  cyl(0.012, 0.012, 0.045, M.brass, 1.03, y + 0.16, z, parent);
+  cyl(0.034, 0.027, 0.05, M.ceramic, 1.22, y + 0.043, z, parent);
+}
+shelfLower(backGroup, 1.18, -ROOM.d / 2 + 0.14);
+shelfUpper(backGroup, 1.5, -ROOM.d / 2 + 0.14);
+shelfSmall(backGroup, 1.34, -ROOM.d / 2 + 0.14);
 
 /* ---------------- counter ---------------- */
 const COUNTER = { x: -0.1, z: -1.06, w: 2.9, h: 0.62, d: 0.38 };
@@ -351,7 +501,7 @@ function siphon(x, z) {
   box(0.015, 0.24, 0.015, M.metal, 0.075, 0.12, 0, g);
   return g;
 }
-siphon(-0.95, COUNTER.z); siphon(-0.62, COUNTER.z);
+siphon(-1.18, COUNTER.z); siphon(-0.85, COUNTER.z);
 function cupSet(x, z, parent = scene, y = null) {
   const yy = y === null ? COUNTER.h + 0.04 : y;
   cyl(0.055, 0.055, 0.008, M.ceramic, x, yy + 0.004, z, parent);
@@ -368,19 +518,19 @@ box(ROOM.w, 0.05, 0.07, M.darkWood, 0, 2.06, -1.0);            // 梁（カウ�
 box(ROOM.w, 0.05, 0.07, M.darkWood, 0, 2.06, TABLE_POS.z);    // 梁（テーブル上）
 function lamp(x, z) {
   const g = new THREE.Group(); scene.add(g);
-  cyl(0.006, 0.006, 0.5, M.black, x, 1.8, z, g, 8);
+  cyl(0.006, 0.006, 0.51, M.black, x, 1.78, z, g, 8);
   const shadeMat = new THREE.MeshStandardMaterial({
     map: glassTex, emissive: 0xffbe78, emissiveMap: glassTex, emissiveIntensity: 1.0,
     side: THREE.DoubleSide, roughness: .4 });
-  const shade = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.115, 0.12, 20, 1, true), shadeMat);
-  shade.position.set(x, 1.52, z); g.add(shade); lampShades.push(shadeMat);
-  const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.022, 10, 8),
+  const shade = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.16, 0.17, 20, 1, true), shadeMat);
+  shade.position.set(x, 1.44, z); g.add(shade); lampShades.push(shadeMat);
+  const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.026, 10, 8),
     new THREE.MeshBasicMaterial({ color: 0xffe2ae }));
-  bulb.position.set(x, 1.48, z); g.add(bulb);
+  bulb.position.set(x, 1.395, z); g.add(bulb);
   const li = new THREE.PointLight(0xffb45c, 5, 4.5, 2);
-  li.position.set(x, 1.44, z); g.add(li); lampLights.push(li);
+  li.position.set(x, 1.35, z); g.add(li); lampLights.push(li);
 }
-lamp(-0.7, -1.0); lamp(0.5, -1.0); lamp(TABLE_POS.x, TABLE_POS.z);
+lamp(-0.62, -1.02); lamp(0.72, -1.02);
 
 /* ---------------- round table + tea set ---------------- */
 const steamSrc = [];
@@ -460,7 +610,7 @@ function updateWalls() {
 
 /* ---------------- view presets ---------------- */
 const VIEWS = {
-  all:     { pos: [2.6, 1.9, 3.4], tgt: [0, 0.55, -0.2] },
+  all:     { pos: [2.2, 1.6, 3.6], tgt: [0, 0.5, -0.3] },
   table:   { pos: [1.15, 0.95, 1.35], tgt: [0.05, 0.45, 0.15] },
   counter: { pos: [0.4, 0.95, 0.55], tgt: [-0.15, 0.62, -1.05] },
   top:     { pos: [0, 4.4, 0.4], tgt: [0, 0, 0.05] },
