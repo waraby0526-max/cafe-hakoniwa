@@ -485,7 +485,11 @@ const loadMsg = document.getElementById('loadMsg');
 const loadErr = document.getElementById('loadErr');
 const lm = new THREE.LoadingManager();
 lm.onProgress = (u, l, t) => { loadBar.style.width = Math.round(l / t * 100) + '%'; loadMsg.textContent = `読み込み中… ${l}/${t}`; };
-lm.onLoad = () => { document.getElementById('loading').classList.add('done'); };
+function hideLoading() { const el = document.getElementById('loading'); if (!el || el.style.display === 'none') return; el.classList.add('done'); setTimeout(() => { el.style.display = 'none'; }, 700); }
+lm.onLoad = hideLoading;
+let settledModels = 0;
+function settleModel() { if (++settledModels >= 3) hideLoading(); }
+setTimeout(hideLoading, 25000);
 const loader = new GLTFLoader(lm);
 loader.setMeshoptDecoder(MeshoptDecoder);
 
@@ -514,9 +518,9 @@ const MODEL_FILES = [
 ];
 for (const mf of MODEL_FILES) {
   loader.load(mf.file,
-    g => placeModel(g, mf.h, PLACEMENT[mf.key], FRONT_OFFSET[mf.key]),
+    g => { placeModel(g, mf.h, PLACEMENT[mf.key], FRONT_OFFSET[mf.key]); settleModel(); },
     undefined,
-    err => {
+    err => { settleModel();
       console.error(mf.file, err);
       loadErr.textContent += `⚠ ${mf.file} の読み込みに失敗しました\n`;
       const chip = document.getElementById('modelErr');
