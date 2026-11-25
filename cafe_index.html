@@ -111,10 +111,10 @@ const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x0d1626);
 
 const camera = new THREE.PerspectiveCamera(46, innerWidth / innerHeight, 0.05, 100);
-camera.position.set(1.35, 1.55, 3.9);
+camera.position.set(0.85, 1.5, 4.15);
 
 const controls = new OrbitControls(camera, renderer.domElement);
-controls.target.set(0, 0.5, -0.3);
+controls.target.set(0.05, 0.5, -0.35);
 controls.enableDamping = true;
 controls.dampingFactor = 0.06;
 controls.maxDistance = 9;
@@ -610,7 +610,7 @@ function updateWalls() {
 
 /* ---------------- view presets ---------------- */
 const VIEWS = {
-  all:     { pos: [1.35, 1.55, 3.9], tgt: [0, 0.5, -0.3] },
+  all:     { pos: [0.85, 1.5, 4.15], tgt: [0.05, 0.5, -0.35] },
   table:   { pos: [1.15, 0.95, 1.35], tgt: [0.05, 0.45, 0.15] },
   counter: { pos: [0.4, 0.95, 0.55], tgt: [-0.15, 0.62, -1.05] },
   top:     { pos: [0, 4.4, 0.4], tgt: [0, 0, 0.05] },
