@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>喫茶店の箱庭（Meshy版）</title>
+<style>
+  html, body { margin:0; padding:0; height:100%; overflow:hidden; background:#14100d;
+    font-family:"Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif; }
+  #app { position:fixed; inset:0; }
+  canvas { display:block; }
+  .chip { position:fixed; z-index:10; color:#f3e7d3; background:rgba(24,17,12,.72);
+    border:1px solid rgba(255,205,140,.25); border-radius:10px; padding:6px 12px;
+    font-size:13px; letter-spacing:.05em; backdrop-filter:blur(4px); pointer-events:none; }
+  #title { top:12px; left:12px; font-size:15px; font-weight:600; }
+  #presets { position:fixed; z-index:10; left:50%; bottom:16px; transform:translateX(-50%);
+    display:flex; gap:8px; }
+  #presets button { pointer-events:auto; cursor:pointer; color:#f3e7d3;
+    background:rgba(24,17,12,.78); border:1px solid rgba(255,205,140,.35);
+    border-radius:999px; padding:9px 18px; font-size:14px; letter-spacing:.08em; }
+  #presets button.active { background:#8a5a2b; border-color:#ffcf90; color:#fff4e0; }
+  #loading { position:fixed; inset:0; z-index:20; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; gap:14px; background:#14100d; color:#f3e7d3;
+    transition:opacity .6s; }
+  #loading.done { opacity:0; pointer-events:none; }
+  #loading .bar { width:min(70vw,320px); height:8px; border-radius:4px;
+    background:rgba(255,255,255,.12); overflow:hidden; }
+  #loading .bar > div { height:100%; width:0%; background:#e8a54b; transition:width .2s; }
+  #loadMsg { font-size:13px; color:#cbb694; min-height:1.2em; text-align:center; padding:0 16px; }
+  #loadErr { font-size:13px; color:#ff9a8a; max-width:86vw; text-align:center; white-space:pre-line; }
+  #vignette { position:fixed; inset:0; z-index:5; pointer-events:none;
+    background:radial-gradient(ellipse at 50% 42%, rgba(0,0,0,0) 52%, rgba(24,12,4,0.38) 100%); }
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<div id="app"></div>
+<div id="vignette"></div>
+<div id="title" class="chip">☕ 喫茶店の箱庭（Meshy版）</div>
+<div id="presets">
+  <button data-view="all" class="active">全体</button>
+  <button data-view="table">テーブル</button>
+  <button data-view="counter">カウンター</button>
+  <button data-view="top">真上</button>
+</div>
+<div id="loading">
+  <div style="font-size:17px;">☕ 喫茶店の箱庭</div>
+  <div class="bar"><div id="loadBar"></div></div>
+  <div id="loadMsg">読み込み中…</div>
+  <div id="loadErr"></div>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
+
+/* ================================================================
+   組み立てパラメータ（URLクエリで上書き可能：調整用）
+   cw   : 箱庭（喫茶店モデル）の横幅ターゲット（元の箱庭の幅 3.4）
+   crot : 喫茶店モデルの回転（度）
+   mh   : マスターの身長 / sh: 着座フィギュア（椅子込み）の高さ
+   floor: 喫茶店モデルの底から内装の床までの高さ
+   rinpos / shiropos / mgrpos : "x,z" 配置
+   fo_rin / fo_shiro / fo_mgr : フィギュアの向き補正（度）
+   ================================================================ */
+const P = new URLSearchParams(location.search);
+const num = (k, d) => { const v = parseFloat(P.get(k)); return Number.isFinite(v) ? v : d; };
+const pair = (k, dx, dz) => { const s = P.get(k); if (!s) return [dx, dz];
+  const a = s.split(',').map(Number); return [a[0] ?? dx, a[1] ?? dz]; };
+
+const CAFE_W   = num('cw', 3.4);
+const CAFE_ROT = num('crot', 0) * Math.PI / 180;
+const MASTER_H = num('mh', 1.30);
+const SEATED_H = num('sh', 0.81);
+const FLOOR    = num('floor', 0.10);
+const [RIN_X, RIN_Z]     = pair('rinpos', -0.55, 0.10);
+const [SHI_X, SHI_Z]     = pair('shiropos', 0.65, 0.20);
+const [MGR_X, MGR_Z]     = pair('mgrpos', -0.15, -0.95);
+const FO = { rin: num('fo_rin', 0) * Math.PI / 180,
+             shiro: num('fo_shiro', 0) * Math.PI / 180,
+             mgr: num('fo_mgr', 0) * Math.PI / 180 };
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+document.getElementById('app').appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0d1626);
+
+const camera = new THREE.PerspectiveCamera(46, innerWidth / innerHeight, 0.05, 100);
+camera.position.set(1.05, 1.8, 4.7);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 0.75, -0.2);
+controls.enableDamping = true;
+controls.dampingFactor = 0.06;
+controls.maxDistance = 10;
+controls.minDistance = 0.4;
+controls.maxPolarAngle = Math.PI * 0.55;
+
+scene.add(new THREE.HemisphereLight(0xffe6c4, 0x2a1c12, 0.55));
+const sun = new THREE.DirectionalLight(0xffd9a8, 2.0);
+sun.position.set(2.6, 3.6, 2.6);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.camera.left = -3; sun.shadow.camera.right = 3;
+sun.shadow.camera.top = 3; sun.shadow.camera.bottom = -3;
+sun.shadow.camera.far = 14;
+sun.shadow.bias = -0.0004;
+scene.add(sun);
+const fill = new THREE.DirectionalLight(0x9db8ff, 0.25);
+fill.position.set(3.5, 1.6, -0.5);
+scene.add(fill);
+// 店内をほんのり持ち上げる点光（ランプ代わり）
+const lamp = new THREE.PointLight(0xffc98a, 12, 6, 1.6);
+lamp.position.set(0, 2.1, 0);
+scene.add(lamp);
+
+const loader = new GLTFLoader();
+loader.setMeshoptDecoder(MeshoptDecoder);
+
+const loadBar = document.getElementById('loadBar');
+const loadMsg = document.getElementById('loadMsg');
+const loadErr = document.getElementById('loadErr');
+let loadedCount = 0;
+const TOTAL = 4;
+function progress(name) {
+  loadedCount++;
+  loadBar.style.width = (loadedCount / TOTAL * 100) + '%';
+  loadMsg.textContent = name + ' を読み込みました（' + loadedCount + ' / ' + TOTAL + '）';
+  if (loadedCount === TOTAL) {
+    document.getElementById('loading').classList.add('done');
+  }
+}
+function loadError(name, e) {
+  loadErr.textContent = name + ' の読み込みに失敗しました\n' + (e && e.message ? e.message : e);
+}
+
+function placeFigure(obj, targetH, x, z, faceTo, foDeg) {
+  const box = new THREE.Box3().setFromObject(obj);
+  const h = box.max.y - box.min.y;
+  const s = targetH / h;
+  obj.scale.setScalar(s);
+  // スケール後の中心を (x, FLOOR + targetH/2, z) に置く
+  const box2 = new THREE.Box3().setFromObject(obj);
+  const c = box2.getCenter(new THREE.Vector3());
+  obj.position.x += x - c.x;
+  obj.position.z += z - c.z;
+  obj.position.y += (FLOOR + targetH / 2) - c.y;
+  // 向き：faceTo の方向を向ける（モデルの正面 = +Z 前提、fo で補正）
+  const ang = Math.atan2(faceTo[0] - x, faceTo[1] - z) + foDeg;
+  obj.rotateY(ang);
+  obj.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  scene.add(obj);
+}
+
+// 喫茶店（箱庭の器）
+loader.load('models_meshy/cafe.glb', (gltf) => {
+  const obj = gltf.scene;
+  const box = new THREE.Box3().setFromObject(obj);
+  const w = box.max.x - box.min.x;
+  const s = CAFE_W / w;
+  obj.scale.setScalar(s);
+  obj.rotation.y = CAFE_ROT;
+  const box2 = new THREE.Box3().setFromObject(obj);
+  const c = box2.getCenter(new THREE.Vector3());
+  obj.position.x -= c.x;
+  obj.position.z -= c.z;
+  obj.position.y -= box2.min.y;   // 底面を y=0 に
+  obj.traverse(o => { if (o.isMesh) { o.receiveShadow = true; } });
+  scene.add(obj);
+  progress('喫茶店');
+}, undefined, (e) => loadError('喫茶店', e));
+
+// 凛（椅子ごと）— シロの方を向く
+loader.load('models_meshy/rin.glb', (gltf) => {
+  placeFigure(gltf.scene, SEATED_H, RIN_X, RIN_Z, [SHI_X, SHI_Z], FO.rin);
+  progress('凛');
+}, undefined, (e) => loadError('凛', e));
+
+// シロ（椅子ごと）— 凛の方を向く
+loader.load('models_meshy/shiro.glb', (gltf) => {
+  placeFigure(gltf.scene, SEATED_H, SHI_X, SHI_Z, [RIN_X, RIN_Z], FO.shiro);
+  progress('シロ');
+}, undefined, (e) => loadError('シロ', e));
+
+// マスター — 店内（+Z方向）を向く
+loader.load('models_meshy/master.glb', (gltf) => {
+  placeFigure(gltf.scene, MASTER_H, MGR_X, MGR_Z, [MGR_X, MGR_Z + 5], FO.mgr);
+  progress('マスター');
+}, undefined, (e) => loadError('マスター', e));
+
+/* ---------------- 視点プリセット ---------------- */
+const views = {
+  all:     { pos: [1.05, 1.8, 4.7],  tgt: [0, 0.75, -0.2] },
+  table:   { pos: [0.4, 1.15, 2.1],  tgt: [(RIN_X + SHI_X) / 2, 0.55, (RIN_Z + SHI_Z) / 2] },
+  counter: { pos: [0.3, 1.3, 1.6],   tgt: [MGR_X, 0.9, MGR_Z] },
+  top:     { pos: [0, 6.4, 0.6],     tgt: [0, 0, -0.1] },
+};
+let camAnim = null;
+function goView(name) {
+  const v = views[name]; if (!v) return;
+  camAnim = {
+    p0: camera.position.clone(), p1: new THREE.Vector3(...v.pos),
+    t0: controls.target.clone(), t1: new THREE.Vector3(...v.tgt),
+    k: 0,
+  };
+  document.querySelectorAll('#presets button').forEach(b =>
+    b.classList.toggle('active', b.dataset.view === name));
+}
+document.querySelectorAll('#presets button').forEach(b =>
+  b.addEventListener('click', () => goView(b.dataset.view)));
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+renderer.setAnimationLoop(() => {
+  if (camAnim) {
+    camAnim.k = Math.min(1, camAnim.k + 0.045);
+    const e = 1 - Math.pow(1 - camAnim.k, 3);
+    camera.position.lerpVectors(camAnim.p0, camAnim.p1, e);
+    controls.target.lerpVectors(camAnim.t0, camAnim.t1, e);
+    if (camAnim.k >= 1) camAnim = null;
+  }
+  controls.update();
+  renderer.render(scene, camera);
+});
+</script>
+</body>
+</html>
