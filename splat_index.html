@@ -99,7 +99,8 @@ const viewer = new GaussianSplats3D.DropInViewer({
 });
 scene.add(viewer);
 
-viewer.addSplatScene('cafe_splat.splat', {
+viewer.addSplatScene('cafe_splat.zip', {
+  format: GaussianSplats3D.SceneFormat.Splat,
   showLoadingUI: false,
   position: [0, 0, 0],
   rotation: [-0.70710678, 0, 0, 0.70710678],
