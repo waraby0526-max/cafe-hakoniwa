@@ -52,7 +52,7 @@ const loadingEl = document.getElementById('loading');
 const errEl = document.getElementById('err');
 function showErr(m) { errEl.textContent = m; errEl.style.display = 'block'; loadingEl.classList.add('done'); }
 
-const CAM_HOME = new THREE.Vector3(0, 0.6, 12.0);
+const CAM_HOME = new THREE.Vector3(0, 0.3, 8.0);
 const TARGET_HOME = new THREE.Vector3(0, 0, 0);
 
 const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
