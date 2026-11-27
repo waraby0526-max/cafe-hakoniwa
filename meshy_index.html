@@ -80,9 +80,9 @@ const CAFE_ROT = num('crot', 0) * Math.PI / 180;
 const MASTER_H = num('mh', 1.30);
 const SEATED_H = num('sh', 0.81);
 const FLOOR    = num('floor', 0.10);
-const [RIN_X, RIN_Z]     = pair('rinpos', -0.68, 0.70);
-const [SHI_X, SHI_Z]     = pair('shiropos', 0.68, 0.70);
-const [MGR_X, MGR_Z]     = pair('mgrpos', -0.15, -0.95);
+const [RIN_X, RIN_Z]     = pair('rinpos', -0.53, 0.70);
+const [SHI_X, SHI_Z]     = pair('shiropos', 0.53, 0.70);
+const [MGR_X, MGR_Z]     = pair('mgrpos', -0.15, -0.63);
 const FO = { rin: num('fo_rin', 0) * Math.PI / 180,
              shiro: num('fo_shiro', 0) * Math.PI / 180,
              mgr: num('fo_mgr', 0) * Math.PI / 180 };
@@ -168,7 +168,7 @@ function placeFigure(obj, targetH, x, z, faceTo, foDeg) {
 }
 
 // 喫茶店（箱庭の器）
-loader.load('models_meshy/cafe.glb', (gltf) => {
+loader.load('models_meshy/cafe.glb?v=nc1', (gltf) => {
   const obj = gltf.scene;
   const box = new THREE.Box3().setFromObject(obj);
   const w = box.max.x - box.min.x;
